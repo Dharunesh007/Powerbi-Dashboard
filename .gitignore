@@ -1,0 +1,6 @@
+.env.local.ps1
+prototype/.cache/
+node_modules/
+*.log
+.DS_Store
+Thumbs.db

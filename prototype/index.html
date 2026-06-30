@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Power BI Premium Command Center</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="rail" aria-label="Primary navigation">
+      <div class="brand" aria-label="Power BI Premium Command Center">
+        <span class="brand-mark" aria-hidden="true">
+          <span class="brand-core"></span>
+          <span class="brand-bars">
+            <span></span>
+            <span></span>
+            <span></span>
+          </span>
+        </span>
+        <span class="brand-wordmark">
+          <strong>BI Sentinel</strong>
+          <small>Premium Command</small>
+        </span>
+      </div>
+      <button class="nav-button is-active" data-page="executive" aria-label="Executive overview">
+        <span class="nav-index">01</span>
+        <span class="nav-copy">
+          <strong>Overview</strong>
+          <small>Executive KPIs</small>
+        </span>
+      </button>
+      <button class="nav-button" data-page="refresh" aria-label="Refresh control tower">
+        <span class="nav-index">02</span>
+        <span class="nav-copy">
+          <strong>Refresh Control</strong>
+          <small>Dataset health</small>
+        </span>
+      </button>
+      <button class="nav-button" data-page="adoption" aria-label="Usage and adoption">
+        <span class="nav-index">03</span>
+        <span class="nav-copy">
+          <strong>Usage Adoption</strong>
+          <small>User engagement</small>
+        </span>
+      </button>
+      <button class="nav-button" data-page="idle" aria-label="Idle asset governance">
+        <span class="nav-index">04</span>
+        <span class="nav-copy">
+          <strong>Idle Governance</strong>
+          <small>Asset cleanup</small>
+        </span>
+      </button>
+      <button class="nav-button" data-page="workspace" aria-label="Workspace governance">
+        <span class="nav-index">05</span>
+        <span class="nav-copy">
+          <strong>Workspaces</strong>
+          <small>Ownership risk</small>
+        </span>
+      </button>
+      <button class="nav-button" data-page="capacity" aria-label="Premium Per User monitoring">
+        <span class="nav-index">06</span>
+        <span class="nav-copy">
+          <strong>PPU Monitoring</strong>
+          <small>License and refresh</small>
+        </span>
+      </button>
+    </aside>
+
+    <main class="workspace">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Power BI Premium Governance</p>
+          <h1 id="page-title">Power BI Premium Command Center</h1>
+          <p class="filter-summary" id="filter-summary">Showing Last 7 days across governed workspaces</p>
+        </div>
+        <div class="toolbar">
+          <label class="filter-control" for="date-range">
+            <span>Date range</span>
+            <select id="date-range">
+              <option value="7" selected>Last 7 days</option>
+              <option value="30">Last 30 days</option>
+            </select>
+          </label>
+          <label class="filter-control" for="scope-filter">
+            <span>Scope</span>
+            <select id="scope-filter">
+              <option value="all" selected>All governed workspaces</option>
+            </select>
+          </label>
+          <button class="refresh-button" id="refresh-api" type="button">Refresh API</button>
+          <button class="alert-button" type="button" aria-label="Open alerts">
+            <span id="alert-count">0</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="live-status-panel" aria-label="Live Power BI API connection">
+        <div>
+          <p class="panel-kicker">Live API Connection</p>
+          <h2 id="live-status-title">Checking Power BI access</h2>
+          <p id="live-status-detail">Connecting to Microsoft token service and Power BI REST APIs.</p>
+        </div>
+        <div class="live-status-grid" id="live-status-grid">
+          <span class="status-chip info">Starting</span>
+        </div>
+      </section>
+
+      <section class="kpi-grid" id="kpi-grid" aria-label="Executive KPIs"></section>
+
+      <section class="dashboard-grid">
+        <article class="panel panel-wide">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker" id="trend-kicker">Adoption</p>
+              <h2 id="trend-title">Active User Trend</h2>
+            </div>
+            <span class="status-chip healthy" id="trend-status">Healthy</span>
+          </div>
+          <canvas id="trend-chart" height="260"></canvas>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker" id="bar-kicker">Operations</p>
+              <h2 id="bar-title">Refresh Health</h2>
+            </div>
+          </div>
+          <div class="bar-list" id="bar-list"></div>
+        </article>
+
+        <article class="panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker" id="matrix-kicker">Governance</p>
+              <h2 id="matrix-title">Workspace Health</h2>
+            </div>
+          </div>
+          <div class="heatmap" id="heatmap"></div>
+        </article>
+
+        <article class="panel panel-wide table-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker" id="table-kicker">Assets</p>
+              <h2 id="table-title">Priority Queue</h2>
+            </div>
+          </div>
+          <div class="data-table" id="data-table"></div>
+        </article>
+
+        <article class="panel action-panel">
+          <div class="panel-header">
+            <div>
+              <p class="panel-kicker">Recommendations</p>
+              <h2>Action Plan</h2>
+            </div>
+          </div>
+          <div class="actions" id="actions"></div>
+        </article>
+      </section>
+    </main>
+  </div>
+
+  <div class="modal-backdrop" id="detail-modal" aria-hidden="true">
+    <section class="detail-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <header class="modal-header">
+        <div>
+          <p class="panel-kicker" id="modal-kicker">Detail</p>
+          <h2 id="modal-title">Drilldown</h2>
+          <p id="modal-subtitle"></p>
+        </div>
+        <button class="modal-close" id="modal-close" type="button" aria-label="Close detail">Close</button>
+      </header>
+      <div class="modal-body" id="modal-body"></div>
+    </section>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

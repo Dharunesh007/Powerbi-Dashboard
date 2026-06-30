@@ -1,0 +1,512 @@
+/*
+Power BI Premium Monitoring measure library.
+
+Expected model tables:
+- Date
+- User
+- Workspace
+- Report
+- Dataset
+- Capacity
+- Usage Event
+- Refresh History
+- Capacity Metric
+- Workspace Health
+- Recommendation
+
+Create a disconnected "Measures" table and store these measures there.
+*/
+
+// Adoption
+
+View Events :=
+CALCULATE (
+    COUNTROWS ( 'Usage Event' ),
+    'Usage Event'[Is View Event] = TRUE ()
+)
+
+Active Users :=
+CALCULATE (
+    DISTINCTCOUNT ( 'Usage Event'[User Key] ),
+    'Usage Event'[Is View Event] = TRUE ()
+)
+
+DAU :=
+VAR AnchorDate = MAX ( 'Date'[Date] )
+RETURN
+    CALCULATE (
+        [Active Users],
+        DATESINPERIOD ( 'Date'[Date], AnchorDate, -1, DAY )
+    )
+
+DAU Previous Day :=
+CALCULATE ( [DAU], DATEADD ( 'Date'[Date], -1, DAY ) )
+
+DAU Trend % :=
+DIVIDE ( [DAU] - [DAU Previous Day], [DAU Previous Day] )
+
+WAU :=
+VAR AnchorDate = MAX ( 'Date'[Date] )
+RETURN
+    CALCULATE (
+        [Active Users],
+        DATESINPERIOD ( 'Date'[Date], AnchorDate, -7, DAY )
+    )
+
+WAU Previous 7 Days :=
+VAR AnchorDate = MAX ( 'Date'[Date] )
+RETURN
+    CALCULATE (
+        [Active Users],
+        DATESBETWEEN ( 'Date'[Date], AnchorDate - 13, AnchorDate - 7 )
+    )
+
+WAU Trend % :=
+DIVIDE ( [WAU] - [WAU Previous 7 Days], [WAU Previous 7 Days] )
+
+MAU :=
+VAR AnchorDate = MAX ( 'Date'[Date] )
+RETURN
+    CALCULATE (
+        [Active Users],
+        DATESINPERIOD ( 'Date'[Date], AnchorDate, -30, DAY )
+    )
+
+MAU Previous 30 Days :=
+VAR AnchorDate = MAX ( 'Date'[Date] )
+RETURN
+    CALCULATE (
+        [Active Users],
+        DATESBETWEEN ( 'Date'[Date], AnchorDate - 59, AnchorDate - 30 )
+    )
+
+MAU Trend % :=
+DIVIDE ( [MAU] - [MAU Previous 30 Days], [MAU Previous 30 Days] )
+
+Report Views 30D :=
+VAR AnchorDate = MAX ( 'Date'[Date] )
+RETURN
+    CALCULATE (
+        [View Events],
+        DATESINPERIOD ( 'Date'[Date], AnchorDate, -30, DAY )
+    )
+
+Power Users 30D :=
+VAR AnchorDate = MAX ( 'Date'[Date] )
+VAR UsersWithViews =
+    ADDCOLUMNS (
+        VALUES ( 'Usage Event'[User Key] ),
+        "ViewCount30D",
+            CALCULATE (
+                [View Events],
+                DATESINPERIOD ( 'Date'[Date], AnchorDate, -30, DAY )
+            )
+    )
+RETURN
+    COUNTROWS ( FILTER ( UsersWithViews, [ViewCount30D] >= 20 ) )
+
+Inactive Users 30D :=
+VAR TotalEnabledUsers =
+    CALCULATE (
+        DISTINCTCOUNT ( 'User'[User Key] ),
+        'User'[Account Enabled] = TRUE ()
+    )
+RETURN
+    TotalEnabledUsers - [MAU]
+
+Retained Users 30D :=
+VAR AnchorDate = MAX ( 'Date'[Date] )
+VAR CurrentUsers =
+    CALCULATETABLE (
+        VALUES ( 'Usage Event'[User Key] ),
+        'Usage Event'[Is View Event] = TRUE (),
+        DATESINPERIOD ( 'Date'[Date], AnchorDate, -30, DAY )
+    )
+VAR PreviousUsers =
+    CALCULATETABLE (
+        VALUES ( 'Usage Event'[User Key] ),
+        'Usage Event'[Is View Event] = TRUE (),
+        DATESBETWEEN ( 'Date'[Date], AnchorDate - 59, AnchorDate - 30 )
+    )
+RETURN
+    COUNTROWS ( INTERSECT ( CurrentUsers, PreviousUsers ) )
+
+Retention % :=
+DIVIDE ( [Retained Users 30D], [MAU Previous 30 Days] )
+
+Repeat Visitors 30D :=
+VAR AnchorDate = MAX ( 'Date'[Date] )
+VAR UsersWithViews =
+    ADDCOLUMNS (
+        VALUES ( 'Usage Event'[User Key] ),
+        "ViewCount30D",
+            CALCULATE (
+                [View Events],
+                DATESINPERIOD ( 'Date'[Date], AnchorDate, -30, DAY )
+            )
+    )
+RETURN
+    COUNTROWS ( FILTER ( UsersWithViews, [ViewCount30D] >= 2 ) )
+
+Repeat Visit % :=
+DIVIDE ( [Repeat Visitors 30D], [MAU] )
+
+Avg Session Duration Minutes :=
+DIVIDE (
+    AVERAGE ( 'Usage Event'[Session Duration Sec] ),
+    60
+)
+
+
+// Refresh health
+
+Refresh Count :=
+COUNTROWS ( 'Refresh History' )
+
+Successful Refresh Count :=
+CALCULATE (
+    [Refresh Count],
+    'Refresh History'[Refresh Status] = "Completed"
+)
+
+Failed Refresh Count :=
+CALCULATE (
+    [Refresh Count],
+    'Refresh History'[Refresh Status] = "Failed"
+)
+
+Failed Refreshes Today :=
+CALCULATE (
+    [Failed Refresh Count],
+    'Date'[Date] = TODAY ()
+)
+
+Failed Refresh % :=
+DIVIDE ( [Failed Refresh Count], [Refresh Count] )
+
+Failed Refresh % 7D :=
+VAR AnchorDate = MAX ( 'Date'[Date] )
+RETURN
+    CALCULATE (
+        [Failed Refresh %],
+        DATESINPERIOD ( 'Date'[Date], AnchorDate, -7, DAY )
+    )
+
+Refresh SLA Met Count :=
+CALCULATE (
+    [Refresh Count],
+    'Refresh History'[SLA Met] = TRUE ()
+)
+
+Refresh SLA % :=
+DIVIDE ( [Refresh SLA Met Count], [Refresh Count] )
+
+Avg Refresh Duration Minutes :=
+AVERAGE ( 'Refresh History'[Duration Minutes] )
+
+P95 Refresh Duration Minutes :=
+PERCENTILEX.INC (
+    'Refresh History',
+    'Refresh History'[Duration Minutes],
+    0.95
+)
+
+Slow Dataset Count :=
+VAR DatasetsWithP95 =
+    ADDCOLUMNS (
+        VALUES ( 'Dataset'[Dataset Key] ),
+        "P95Duration", [P95 Refresh Duration Minutes]
+    )
+RETURN
+    COUNTROWS ( FILTER ( DatasetsWithP95, [P95Duration] > 45 ) )
+
+Stale Dataset Count :=
+VAR DatasetFreshness =
+    ADDCOLUMNS (
+        VALUES ( 'Dataset'[Dataset Key] ),
+        "LastRefreshUtc", CALCULATE ( MAX ( 'Refresh History'[End UTC] ) )
+    )
+RETURN
+    COUNTROWS (
+        FILTER (
+            DatasetFreshness,
+            ISBLANK ( [LastRefreshUtc] )
+                || DATEDIFF ( [LastRefreshUtc], UTCNOW (), DAY ) > 1
+        )
+    )
+
+Retry Count :=
+SUM ( 'Refresh History'[Retry Count] )
+
+Refresh Failure Severity Score :=
+MIN (
+    100,
+    ( [Failed Refresh % 7D] * 70 )
+        + MIN ( 30, [Retry Count] * 2 )
+)
+
+
+// Idle asset governance
+
+Last Report View UTC :=
+CALCULATE (
+    MAX ( 'Usage Event'[Event UTC] ),
+    'Usage Event'[Is View Event] = TRUE ()
+)
+
+Report Days Since Last View :=
+VAR LastView = [Last Report View UTC]
+RETURN
+    IF ( ISBLANK ( LastView ), BLANK (), DATEDIFF ( LastView, UTCNOW (), DAY ) )
+
+Idle Reports > 30 Days :=
+VAR ReportsWithAge =
+    ADDCOLUMNS (
+        VALUES ( 'Report'[Report Key] ),
+        "DaysIdle", [Report Days Since Last View],
+        "Views", [View Events]
+    )
+RETURN
+    COUNTROWS (
+        FILTER (
+            ReportsWithAge,
+            ISBLANK ( [DaysIdle] )
+                || [DaysIdle] > 30
+        )
+    )
+
+Idle Reports > 60 Days :=
+VAR ReportsWithAge =
+    ADDCOLUMNS (
+        VALUES ( 'Report'[Report Key] ),
+        "DaysIdle", [Report Days Since Last View],
+        "Views", [View Events]
+    )
+RETURN
+    COUNTROWS (
+        FILTER (
+            ReportsWithAge,
+            ISBLANK ( [DaysIdle] )
+                || [DaysIdle] > 60
+        )
+    )
+
+Idle Reports > 90 Days :=
+VAR ReportsWithAge =
+    ADDCOLUMNS (
+        VALUES ( 'Report'[Report Key] ),
+        "DaysIdle", [Report Days Since Last View],
+        "Views", [View Events]
+    )
+RETURN
+    COUNTROWS (
+        FILTER (
+            ReportsWithAge,
+            ISBLANK ( [DaysIdle] )
+                || [DaysIdle] > 90
+        )
+    )
+
+Report Count :=
+DISTINCTCOUNT ( 'Report'[Report Key] )
+
+Idle Report % :=
+DIVIDE ( [Idle Reports > 60 Days], [Report Count] )
+
+Duplicate Report Candidates :=
+VAR ReportNames =
+    ADDCOLUMNS (
+        SUMMARIZE ( 'Report', 'Report'[Workspace Key], 'Report'[Report Name] ),
+        "ReportCopies", CALCULATE ( DISTINCTCOUNT ( 'Report'[Report Key] ) )
+    )
+RETURN
+    COUNTROWS ( FILTER ( ReportNames, [ReportCopies] > 1 ) )
+
+Open Recommendation Count :=
+CALCULATE (
+    COUNTROWS ( 'Recommendation' ),
+    'Recommendation'[Action Status] = "Open"
+)
+
+High Risk Recommendation Count :=
+CALCULATE (
+    [Open Recommendation Count],
+    'Recommendation'[Risk Level] = "High"
+)
+
+
+// Workspace governance
+
+Workspace Count :=
+DISTINCTCOUNT ( 'Workspace'[Workspace Key] )
+
+Orphaned Workspace Count :=
+CALCULATE (
+    DISTINCTCOUNT ( 'Workspace Health'[Workspace Key] ),
+    'Workspace Health'[Owner Count] = 0
+        || 'Workspace Health'[Orphan Risk Flag] = TRUE ()
+)
+
+Inactive Workspace Count :=
+CALCULATE (
+    DISTINCTCOUNT ( 'Workspace Health'[Workspace Key] ),
+    'Workspace Health'[Days Since Last Activity] > 60
+)
+
+Workspace Usage Score :=
+AVERAGE ( 'Workspace Health'[Usage Score] )
+
+Workspace Refresh Health Score :=
+AVERAGE ( 'Workspace Health'[Refresh Health Score] )
+
+Workspace Ownership Score :=
+AVERAGE ( 'Workspace Health'[Ownership Score] )
+
+Workspace Activity Score :=
+AVERAGE ( 'Workspace Health'[Activity Score] )
+
+Workspace Orphan Risk Score :=
+AVERAGE ( 'Workspace Health'[Orphan Risk Score] )
+
+Workspace Stale Content Score :=
+AVERAGE ( 'Workspace Health'[Stale Content Score] )
+
+Workspace Health Score :=
+ROUND (
+    ( [Workspace Usage Score] * 0.20 )
+        + ( [Workspace Refresh Health Score] * 0.25 )
+        + ( [Workspace Ownership Score] * 0.15 )
+        + ( [Workspace Activity Score] * 0.15 )
+        + ( [Workspace Orphan Risk Score] * 0.10 )
+        + ( [Workspace Stale Content Score] * 0.15 ),
+    0
+)
+
+Workspace Health Status :=
+SWITCH (
+    TRUE (),
+    [Workspace Health Score] >= 80, "Healthy",
+    [Workspace Health Score] >= 60, "Review",
+    "Critical"
+)
+
+Workspace Health Color :=
+SWITCH (
+    [Workspace Health Status],
+    "Healthy", "#36D399",
+    "Review", "#F5B84B",
+    "Critical", "#FF5C73",
+    "#8FA3B8"
+)
+
+
+// Capacity monitoring
+
+Capacity CPU % :=
+AVERAGE ( 'Capacity Metric'[CPU Pct] )
+
+Capacity Memory % :=
+AVERAGE ( 'Capacity Metric'[Memory Pct] )
+
+Capacity Query Load % :=
+AVERAGE ( 'Capacity Metric'[Query Load Pct] )
+
+Capacity Utilization % :=
+PERCENTILEX.INC (
+    'Capacity Metric',
+    COALESCE ( 'Capacity Metric'[CU Pct], 'Capacity Metric'[CPU Pct] ),
+    0.95
+)
+
+Peak Capacity Utilization % :=
+MAXX (
+    'Capacity Metric',
+    COALESCE ( 'Capacity Metric'[CU Pct], 'Capacity Metric'[CPU Pct] )
+)
+
+Overload Warning Count :=
+SUM ( 'Capacity Metric'[Overload Event Count] )
+
+Throttling Seconds :=
+SUM ( 'Capacity Metric'[Throttling Sec] )
+
+Refresh Queue Count :=
+MAX ( 'Capacity Metric'[Refresh Queue Count] )
+
+Concurrency Peak :=
+MAX ( 'Capacity Metric'[Concurrency Count] )
+
+Projected Capacity Exhaustion Date :=
+VAR DailyUtilization =
+    SUMMARIZECOLUMNS (
+        'Date'[Date],
+        "DailyP95", [Capacity Utilization %]
+    )
+VAR KnownDays =
+    FILTER ( DailyUtilization, NOT ISBLANK ( [DailyP95] ) )
+VAR Slope =
+    LINESTX (
+        KnownDays,
+        [DailyP95],
+        INT ( 'Date'[Date] )
+    )
+VAR SlopeValue = SELECTCOLUMNS ( Slope, "Slope", [Slope1] )
+VAR InterceptValue = SELECTCOLUMNS ( Slope, "Intercept", [Intercept] )
+VAR CurrentSerial = INT ( MAX ( 'Date'[Date] ) )
+VAR CurrentValue = [Capacity Utilization %]
+VAR DaysTo100 =
+    DIVIDE ( 100 - CurrentValue, MAXX ( SlopeValue, [Slope] ) )
+RETURN
+    IF (
+        MAXX ( SlopeValue, [Slope] ) > 0,
+        DATE ( 1899, 12, 30 ) + CurrentSerial + DaysTo100,
+        BLANK ()
+    )
+
+Capacity Status :=
+SWITCH (
+    TRUE (),
+    [Throttling Seconds] > 0 || [Peak Capacity Utilization %] >= 100, "Overloaded",
+    [Capacity Utilization %] >= 85, "Watch",
+    "Healthy"
+)
+
+Capacity Status Color :=
+SWITCH (
+    [Capacity Status],
+    "Healthy", "#36D399",
+    "Watch", "#F5B84B",
+    "Overloaded", "#FF5C73",
+    "#8FA3B8"
+)
+
+
+// Executive summary
+
+Platform Health Score :=
+ROUND (
+    ( [Workspace Health Score] * 0.45 )
+        + ( ( 100 - ( [Failed Refresh %] * 100 ) ) * 0.25 )
+        + ( ( 100 - MIN ( 100, [Idle Report %] * 100 ) ) * 0.15 )
+        + ( ( 100 - MIN ( 100, MAX ( 0, [Capacity Utilization %] - 80 ) * 5 ) ) * 0.15 ),
+    0
+)
+
+Platform Health Status :=
+SWITCH (
+    TRUE (),
+    [Platform Health Score] >= 85, "Excellent",
+    [Platform Health Score] >= 75, "Stable",
+    [Platform Health Score] >= 60, "Needs Review",
+    "At Risk"
+)
+
+Alert Count :=
+[Failed Refreshes Today]
+    + [High Risk Recommendation Count]
+    + [Overload Warning Count]
+
+Recommended Action Count :=
+[Open Recommendation Count]
+    + [Slow Dataset Count]
+    + [Stale Dataset Count]
