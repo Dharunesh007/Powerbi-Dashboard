@@ -4,7 +4,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.dirname(fileURLToPath(import.meta.url));
-const port = Number.parseInt(process.argv[2] || "47844", 10);
+const port = Number.parseInt(process.env.PORT || process.argv[2] || "47844", 10);
+const host = process.env.HOST || (process.env.PORT ? "0.0.0.0" : "127.0.0.1");
 const cacheDir = path.join(root, ".cache");
 
 const mime = {
@@ -913,6 +914,6 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(port, "127.0.0.1", () => {
-  console.log(`Power BI prototype running at http://localhost:${port}/`);
+server.listen(port, host, () => {
+  console.log(`Power BI prototype running at http://${host === "0.0.0.0" ? "localhost" : host}:${port}/`);
 });

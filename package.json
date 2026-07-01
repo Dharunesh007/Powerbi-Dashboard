@@ -1,0 +1,12 @@
+{
+  "name": "powerbi-monitoring-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node prototype/server.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
